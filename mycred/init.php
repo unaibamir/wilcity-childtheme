@@ -1,26 +1,34 @@
 <?php
-/*if( is_admin() ) {
-	return;
-}
 
-$post  = get_post(21583);
+add_action( "init", function(){
+	global $wpdb, $mycred_log_table;
+	$logs = $wpdb->get_results( "SELECT * FROM {$mycred_log_table} WHERE ref ='wilcity_mycred_photos_updated_each' AND ref_id = 21584 ");
+	if( $logs ) {
+		$total_creds = wp_list_pluck( $logs, "creds" );
+		$total_creds = array_sum($total_creds);
 
-$t_time = get_the_time( __( 'Y/m/d g:i:s a' ), $post );
-$m_time = $post->post_date;
-$time   = get_post_time( 'G', true, $post );
+		$log_ids = wp_list_pluck( $logs, "id" );
 
-$time_diff = time() - $time;
+		//dd( $log_ids );
+	}
+	//dd( wp_list_pluck( $logs, "creds" ) );
 
-if ( $time_diff > 0 && $time_diff < DAY_IN_SECONDS ) {
-	$h_time = sprintf( __( '%s ago' ), human_time_diff( $time ) );
-} else {
-	$h_time = mysql2date( __( 'Y/m/d' ), $m_time );
-}
 
-$h_time = sprintf( __( '%s ago' ), human_time_diff( $time ) );
 
-dd($h_time);
+	/*$post_id = 21584;
+
+	$logs = $wpdb->get_results( "SELECT * FROM {$mycred_log_table} WHERE ref_id = 21584 ");
+
+	if( $logs ) {
+		$total_creds = wp_list_pluck( $logs, "creds" );
+		$total_creds = array_sum($total_creds);
+
+		dd($total_creds);
+	}
+	dd($logs);
 */
+});
+
 add_filter( 'mycred_setup_hooks', 'wilcity_custom_mycred_hooks', 99 );
 function wilcity_custom_mycred_hooks( $hooks ) {
 
@@ -81,7 +89,7 @@ function wilcity_custom_mycred_hooks( $hooks ) {
 }
 
 
-add_filter( "mycred_all_references", "wilcity_custom_mycred_references", 99 );
+//add_filter( "mycred_all_references", "wilcity_custom_mycred_references", 99 );
 function wilcity_custom_mycred_references( $references ) {
 
 	$prefix_hook	= "wilcity_mycred_";
@@ -122,14 +130,16 @@ class WilCity_myCRED_Featured_Image extends myCRED_Hook {
 	 */
 	public function run() {
 		
-		add_action( 'added_post_meta',  array( $this, 'listing_updated_featured_image' ), 99, 4 );
+		add_action( 'added_post_meta',  	array( $this, 'listing_updated_featured_image_new' ), 99, 4 );
+		add_action( 'updated_postmeta',  	array( $this, 'listing_updated_featured_image_update' ), 99, 4 );
+		add_action( 'delete_post_meta',  	array( $this, 'listing_updated_featured_image_deleted' ), 99, 4 );
 	}
 
 
 	/**
 	 * Check if the user qualifies for points
 	 */
-	public function listing_updated_featured_image( $meta_id, $post_id, $meta_key, $meta_value ) {
+	public function listing_updated_featured_image_new( $meta_id, $post_id, $meta_key, $meta_value ) {
 
 		$user_id = get_current_user_id();
 
@@ -140,25 +150,80 @@ class WilCity_myCRED_Featured_Image extends myCRED_Hook {
 
 		if ( empty( $meta_value ) ) return;
 
-		//if ( is_admin() ) return;
-
 		// Check if user is excluded (required)
 		if ( $this->core->exclude_user( $user_id ) ) return;
 
 		// Limit & Execute
-		if ( ! $this->over_hook_limit( '', 'wilcity_mycred_featured_image_updated', $user_id ) ) {
-			if( ! $this->has_entry( 'wilcity_mycred_featured_image_updated', $post_id, $user_id, "add", $this->mycred_type ) ) {
-				$this->core->add_creds(
-					'wilcity_mycred_featured_image_updated',
-					$user_id,
-					$this->prefs['creds'],
-					$this->prefs['log'],
-					$post_id,
-					'add',
-					$this->mycred_type
-				);
-			}
+		$this->core->add_creds(
+			'wilcity_mycred_featured_image_updated',
+			$user_id,
+			$this->prefs['creds'],
+			$this->prefs['log'],
+			$post_id,
+			'',
+			$this->mycred_type
+		);
+	}
+
+
+	/**
+	 * Check if the user qualifies for points
+	 */
+	public function listing_updated_featured_image_update( $meta_id, $post_id, $meta_key, $meta_value ) {
+
+		$user_id = get_current_user_id();
+
+		// Check if user is updating featured image only and of lising only (required)
+		if ( "listing" != get_post_type( $post_id ) ) return;
+
+		if ( "_thumbnail_id" != $meta_key ) return;
+
+		// Check if user is excluded (required)
+		if ( $this->core->exclude_user( $user_id ) ) return;
+
+		if ( empty( $meta_value ) ) {
+			$creds = -1 * $this->prefs['creds'];
+		} else {
+			$creds = $this->prefs['creds'];
 		}
+		
+		$this->core->add_creds(
+			'wilcity_mycred_featured_image_updated',
+			$user_id,
+			$creds,
+			$this->prefs['log'],
+			$post_id,
+			'',
+			$this->mycred_type
+		);
+	}
+
+	/**
+	 * Check if the user qualifies for points
+	 */
+	public function listing_updated_featured_image_deleted( $meta_id, $post_id, $meta_key, $meta_value ) {
+
+		$user_id = get_current_user_id();
+
+		// Check if user is updating featured image only and of lising only (required)
+		if ( "listing" != get_post_type( $post_id ) ) return;
+
+		if ( "_thumbnail_id" != $meta_key ) return;
+
+		// Check if user is excluded (required)
+		if ( $this->core->exclude_user( $user_id ) ) return;
+
+		$creds = -1 * $this->prefs['creds'];
+		
+		$this->core->add_creds(
+			'wilcity_mycred_featured_image_removed',
+			$user_id,
+			$creds,
+			'wilcity_mycred_featured_image_removed',
+			$post_id,
+			'',
+			$this->mycred_type
+		);
 	}
 
 	/**
@@ -179,12 +244,7 @@ class WilCity_myCRED_Featured_Image extends myCRED_Hook {
 						<input type="text" name="<?php echo $this->field_name( 'creds' ); ?>" id="<?php echo $this->field_id( 'creds' ); ?>" value="<?php echo $this->core->number( $prefs['creds'] ); ?>" class="form-control" />
 					</div>
 				</div>
-				<div class="col-lg-4 col-md-6 col-sm-6 col-xs-12">
-					<div class="form-group">
-						<label for="<?php echo $this->field_id( 'limit' ); ?>"><?php _e( 'Limit', 'mycred' ); ?></label>
-						<?php echo $this->hook_limit_setting( $this->field_name( 'limit' ), $this->field_id( 'limit' ), $prefs['limit'] ); ?>
-					</div>
-				</div>
+				
 				<div class="col-lg-6 col-md-12 col-sm-12 col-xs-12">
 					<div class="form-group">
 						<label for="<?php echo $this->field_id( 'log' ); ?>"><?php _e( 'Log Template', 'mycred' ); ?></label>
@@ -205,16 +265,7 @@ class WilCity_myCRED_Featured_Image extends myCRED_Hook {
 	 * @version 1.0
 	 */
 	function sanitise_preferences( $data ) {
-
-		if ( isset( $data['limit'] ) && isset( $data['limit_by'] ) ) {
-			$limit = sanitize_text_field( $data['limit'] );
-			if ( $limit == '' ) $limit = 0;
-			$data['limit'] = $limit . '/' . $data['limit_by'];
-			unset( $data['limit_by'] );
-		}
-
 		return $data;
-
 	}
 }
 
@@ -240,14 +291,16 @@ class WilCity_myCRED_Logo extends myCRED_Hook {
 	 */
 	public function run() {
 		
-		add_action( 'added_post_meta',  array( $this, 'listing_updated_logo_image' ), 99, 4 );
+		add_action( 'added_post_meta',  	array( $this, 'listing_updated_logo_image_new' ), 99, 4 );
+		add_action( 'updated_postmeta',  	array( $this, 'listing_updated_logo_image_updated' ), 99, 4 );
+		add_action( 'delete_post_meta',  	array( $this, 'listing_updated_logo_image_deleted' ), 99, 4 );
 	}
 
 
 	/**
 	 * Check if the user qualifies for points
 	 */
-	public function listing_updated_logo_image( $meta_id, $post_id, $meta_key, $meta_value ) {
+	public function listing_updated_logo_image_new( $meta_id, $post_id, $meta_key, $meta_value ) {
 
 		$user_id = get_current_user_id();
 
@@ -258,25 +311,78 @@ class WilCity_myCRED_Logo extends myCRED_Hook {
 
 		if ( empty( $meta_value ) ) return;
 
-		//if ( is_admin() ) return;
 
 		// Check if user is excluded (required)
 		if ( $this->core->exclude_user( $user_id ) ) return;
 
 		// Limit & Execute
-		if ( ! $this->over_hook_limit( '', 'wilcity_mycred_logo_updated', $user_id ) ) {
-			if( ! $this->has_entry( 'wilcity_mycred_logo_updated', $post_id, $user_id, "add", $this->mycred_type ) ) {
-				$this->core->add_creds(
-					'wilcity_mycred_logo_updated',
-					$user_id,
-					$this->prefs['creds'],
-					$this->prefs['log'],
-					$post_id,
-					'add',
-					$this->mycred_type
-				);
-			}
-		}
+		$this->core->add_creds(
+			'wilcity_mycred_logo_added',
+			$user_id,
+			$this->prefs['creds'],
+			$this->prefs['log'],
+			$post_id,
+			'add',
+			$this->mycred_type
+		);
+	}
+
+	/**
+	 * Check if the user qualifies for points
+	 */
+	public function listing_updated_logo_image_updated( $meta_id, $post_id, $meta_key, $meta_value ) {
+
+		$user_id = get_current_user_id();
+
+		// Check if user is updating logo only and of lising only (required)
+		if ( "listing" != get_post_type( $post_id ) ) return;
+
+		if ( "wilcity_logo" != $meta_key ) return;
+
+		if ( empty( $meta_value ) ) return;
+
+
+		// Check if user is excluded (required)
+		if ( $this->core->exclude_user( $user_id ) ) return;
+
+		// Limit & Execute
+		$this->core->add_creds(
+			'wilcity_mycred_logo_updated',
+			$user_id,
+			$this->prefs['creds'],
+			$this->prefs['log'],
+			$post_id,
+			'add',
+			$this->mycred_type
+		);
+	}
+
+	/**
+	 * Check if the user qualifies for points
+	 */
+	public function listing_updated_logo_image_deleted( $meta_id, $post_id, $meta_key, $meta_value ) {
+
+		$user_id = get_current_user_id();
+
+		// Check if user is updating featured image only and of lising only (required)
+		if ( "listing" != get_post_type( $post_id ) ) return;
+
+		if ( "wilcity_logo" != $meta_key ) return;
+
+		// Check if user is excluded (required)
+		if ( $this->core->exclude_user( $user_id ) ) return;
+
+		$creds = -1 * $this->prefs['creds'];
+		
+		$this->core->add_creds(
+			'wilcity_mycred_logo_updated_removed',
+			$user_id,
+			$creds,
+			'wilcity_mycred_logo_updated_removed',
+			$post_id,
+			'',
+			$this->mycred_type
+		);
 	}
 
 	/**
@@ -297,12 +403,7 @@ class WilCity_myCRED_Logo extends myCRED_Hook {
 						<input type="text" name="<?php echo $this->field_name( 'creds' ); ?>" id="<?php echo $this->field_id( 'creds' ); ?>" value="<?php echo $this->core->number( $prefs['creds'] ); ?>" class="form-control" />
 					</div>
 				</div>
-				<div class="col-lg-4 col-md-6 col-sm-6 col-xs-12">
-					<div class="form-group">
-						<label for="<?php echo $this->field_id( 'limit' ); ?>"><?php _e( 'Limit', 'mycred' ); ?></label>
-						<?php echo $this->hook_limit_setting( $this->field_name( 'limit' ), $this->field_id( 'limit' ), $prefs['limit'] ); ?>
-					</div>
-				</div>
+				
 				<div class="col-lg-6 col-md-12 col-sm-12 col-xs-12">
 					<div class="form-group">
 						<label for="<?php echo $this->field_id( 'log' ); ?>"><?php _e( 'Log Template', 'mycred' ); ?></label>
@@ -323,16 +424,7 @@ class WilCity_myCRED_Logo extends myCRED_Hook {
 	 * @version 1.0
 	 */
 	function sanitise_preferences( $data ) {
-
-		if ( isset( $data['limit'] ) && isset( $data['limit_by'] ) ) {
-			$limit = sanitize_text_field( $data['limit'] );
-			if ( $limit == '' ) $limit = 0;
-			$data['limit'] = $limit . '/' . $data['limit_by'];
-			unset( $data['limit_by'] );
-		}
-
 		return $data;
-
 	}
 }
 
@@ -395,19 +487,15 @@ class WilCity_myCRED_Description extends myCRED_Hook {
 		if ( $this->core->exclude_user( $user_id ) ) return;
 
 		// Limit & Execute
-		if ( ! $this->over_hook_limit( '', 'wilcity_mycred_description_updated', $user_id ) ) {
-			if( ! $this->has_entry( 'wilcity_mycred_description_updated', $post_id, $user_id, "add", $this->mycred_type ) ) {
-				$this->core->add_creds(
-					'wilcity_mycred_description_updated',
-					$user_id,
-					$this->prefs['creds'],
-					$this->prefs['log'],
-					$post_id,
-					'add',
-					$this->mycred_type
-				);
-			}
-		}
+		$this->core->add_creds(
+			'wilcity_mycred_description_updated',
+			$user_id,
+			$this->prefs['creds'],
+			$this->prefs['log'],
+			$post_id,
+			'add',
+			$this->mycred_type
+		);
 
 		//add_action( 'save_post_listing',  array( $this, 'listing_updated_content_desc' ), 99, 3 );
 	}
@@ -430,12 +518,7 @@ class WilCity_myCRED_Description extends myCRED_Hook {
 						<input type="text" name="<?php echo $this->field_name( 'creds' ); ?>" id="<?php echo $this->field_id( 'creds' ); ?>" value="<?php echo $this->core->number( $prefs['creds'] ); ?>" class="form-control" />
 					</div>
 				</div>
-				<div class="col-lg-4 col-md-6 col-sm-6 col-xs-12">
-					<div class="form-group">
-						<label for="<?php echo $this->field_id( 'limit' ); ?>"><?php _e( 'Limit', 'mycred' ); ?></label>
-						<?php echo $this->hook_limit_setting( $this->field_name( 'limit' ), $this->field_id( 'limit' ), $prefs['limit'] ); ?>
-					</div>
-				</div>
+				
 				<div class="col-lg-6 col-md-12 col-sm-12 col-xs-12">
 					<div class="form-group">
 						<label for="<?php echo $this->field_id( 'log' ); ?>"><?php _e( 'Log Template', 'mycred' ); ?></label>
@@ -456,16 +539,7 @@ class WilCity_myCRED_Description extends myCRED_Hook {
 	 * @version 1.0
 	 */
 	function sanitise_preferences( $data ) {
-
-		if ( isset( $data['limit'] ) && isset( $data['limit_by'] ) ) {
-			$limit = sanitize_text_field( $data['limit'] );
-			if ( $limit == '' ) $limit = 0;
-			$data['limit'] = $limit . '/' . $data['limit_by'];
-			unset( $data['limit_by'] );
-		}
-
 		return $data;
-
 	}
 }
 
@@ -491,14 +565,58 @@ class WilCity_myCRED_Contact_Info extends myCRED_Hook {
 	 */
 	public function run() {
 		
-		add_action( 'added_post_meta',  array( $this, 'listing_updated_logo_image' ), 99, 4 );
+		add_action( 'added_post_meta',  array( $this, 'listing_updated_contact_info_new' ), 99, 4 );
+		add_action( 'updated_postmeta',  array( $this, 'listing_updated_contact_info_updated' ), 99, 4 );
+		add_action( 'delete_post_meta',  array( $this, 'listing_updated_contact_info_deleted' ), 99, 4 );
 	}
 
 
 	/**
 	 * Check if the user qualifies for points
 	 */
-	public function listing_updated_logo_image( $meta_id, $post_id, $meta_key, $meta_value ) {
+	public function listing_updated_contact_info_new( $meta_id, $post_id, $meta_key, $meta_value ) {
+
+		$user_id = get_current_user_id();
+
+		// Check if user is updating logo only and of lising only (required)
+		if ( "listing" != get_post_type( $post_id ) ) return;
+
+		$contact_keys = array(
+			"wilcity_email",
+			"wilcity_website",
+			"wilcity_social_networks"
+		);
+
+		if( !in_array($meta_key, $contact_keys ) ) {
+			return;
+		}
+		
+		// Limit & Execute
+		if ( $this->core->exclude_user( $user_id ) ) return;
+
+		if ( empty( $meta_value ) ) {
+			$creds = -1 * $this->prefs['creds'];
+		} else {
+			$creds = $this->prefs['creds'];
+		}
+
+		
+		// Limit & Execute
+		$this->core->add_creds(
+			'wilcity_mycred_contact_updated',
+			$user_id,
+			$creds,
+			$this->prefs['log'],
+			$post_id,
+			'contact_info_added',
+			$this->mycred_type
+		);
+	}
+
+	/**
+	 * Check if the user qualifies for points
+	 */
+	public function listing_updated_contact_info_updated( $meta_id, $post_id, $meta_key, $meta_value ) {
 
 		$user_id = get_current_user_id();
 
@@ -515,27 +633,64 @@ class WilCity_myCRED_Contact_Info extends myCRED_Hook {
 			return;
 		}
 
-		if ( empty( $meta_value ) ) return;
+		// Check if user is excluded (required)
+		if ( $this->core->exclude_user( $user_id ) ) return;
 
-		//if ( is_admin() ) return;
+		if ( empty( $meta_value ) ) {
+			$creds = -1 * $this->prefs['creds'];
+		} else {
+			$creds = $this->prefs['creds'];
+		}
+
+		
+		// Limit & Execute
+		$this->core->add_creds(
+			'wilcity_mycred_contact_updated - '.$meta_key,
+			$user_id,
+			$creds,
+			$this->prefs['log'],
+			$post_id,
+			'contact_info_updated - '.$meta_key,
+			$this->mycred_type
+		);
+	}
+
+	/**
+	 * Check if the user qualifies for points
+	 */
+	public function listing_updated_contact_info_deleted( $meta_id, $post_id, $meta_key, $meta_value ) {
+
+		$user_id = get_current_user_id();
+
+		// Check if user is updating logo only and of lising only (required)
+		if ( "listing" != get_post_type( $post_id ) ) return;
+
+		$contact_keys = array(
+			"wilcity_email",
+			"wilcity_website",
+			"wilcity_social_networks"
+		);
+
+		if( !in_array($meta_key, $contact_keys ) ) {
+			return;
+		}
 
 		// Check if user is excluded (required)
 		if ( $this->core->exclude_user( $user_id ) ) return;
 
+		$creds = -1 * $this->prefs['creds'];
+
+		
 		// Limit & Execute
-		if ( ! $this->over_hook_limit( '', 'wilcity_mycred_contact_updated', $user_id ) ) {
-			if( ! $this->has_entry( 'wilcity_mycred_contact_updated', $post_id, $user_id, "add", $this->mycred_type ) ) {
-				$this->core->add_creds(
-					'wilcity_mycred_contact_updated',
-					$user_id,
-					$this->prefs['creds'],
-					$this->prefs['log'],
-					$post_id,
-					'add',
-					$this->mycred_type
-				);
-			}
-		}
+		$this->core->add_creds(
+			'wilcity_mycred_contact_removed - '.$meta_key,
+			$user_id,
+			$creds,
+			'contact_info_removed - '.$meta_key,
+			$post_id,
+			'contact_info_removed - '.$meta_key,
+			$this->mycred_type
+		);
 	}
 
 	/**
@@ -556,12 +711,7 @@ class WilCity_myCRED_Contact_Info extends myCRED_Hook {
 						<input type="text" name="<?php echo $this->field_name( 'creds' ); ?>" id="<?php echo $this->field_id( 'creds' ); ?>" value="<?php echo $this->core->number( $prefs['creds'] ); ?>" class="form-control" />
 					</div>
 				</div>
-				<div class="col-lg-4 col-md-6 col-sm-6 col-xs-12">
-					<div class="form-group">
-						<label for="<?php echo $this->field_id( 'limit' ); ?>"><?php _e( 'Limit', 'mycred' ); ?></label>
-						<?php echo $this->hook_limit_setting( $this->field_name( 'limit' ), $this->field_id( 'limit' ), $prefs['limit'] ); ?>
-					</div>
-				</div>
+				
 				<div class="col-lg-6 col-md-12 col-sm-12 col-xs-12">
 					<div class="form-group">
 						<label for="<?php echo $this->field_id( 'log' ); ?>"><?php _e( 'Log Template', 'mycred' ); ?></label>
@@ -582,16 +732,7 @@ class WilCity_myCRED_Contact_Info extends myCRED_Hook {
 	 * @version 1.0
 	 */
 	function sanitise_preferences( $data ) {
-
-		if ( isset( $data['limit'] ) && isset( $data['limit_by'] ) ) {
-			$limit = sanitize_text_field( $data['limit'] );
-			if ( $limit == '' ) $limit = 0;
-			$data['limit'] = $limit . '/' . $data['limit_by'];
-			unset( $data['limit_by'] );
-		}
-
 		return $data;
-
 	}
 }
 
@@ -617,7 +758,9 @@ class WilCity_myCRED_Photo extends myCRED_Hook {
 	 */
 	public function run() {
 		
-		add_action( 'added_post_meta',  array( $this, 'listing_updated_gallery_image' ), 99, 4 );
+		add_action( 'added_post_meta',  	array( $this, 'listing_updated_gallery_image' ), 99, 4 );
+		add_action( 'updated_postmeta',  	array( $this, 'listing_updated_gallery_image' ), 99, 4 );
+		add_action( 'delete_post_meta',  	array( $this, 'listing_updated_gallery_image_deleted' ), 99, 4 );
 	}
 
 
@@ -625,6 +768,8 @@ class WilCity_myCRED_Photo extends myCRED_Hook {
 	 * Check if the user qualifies for points
 	 */
 	public function listing_updated_gallery_image( $meta_id, $post_id, $meta_key, $meta_value ) {
+
+		global $wpdb, $mycred_log_table;
 
 		$user_id = get_current_user_id();
 
@@ -634,26 +779,74 @@ class WilCity_myCRED_Photo extends myCRED_Hook {
 		if ( "wilcity_gallery" != $meta_key ) return;
 
 		$images  = maybe_unserialize( $meta_value );
+
+		$logs = $wpdb->get_results( "SELECT * FROM {$mycred_log_table} WHERE ref ='wilcity_mycred_photos_updated_each' AND ref_id = {$post_id} ");
 		
-		if ( empty($images ) || count($images) < 1 || !is_array($images) ) return;
+		if( $logs ) {
+			$total_creds 			= wp_list_pluck( $logs, "creds" );
+			$total_creds 			= array_sum($total_creds);
+			$total_creds_remove 	= -1 * $total_creds;
+			$log_ids 				= wp_list_pluck( $logs, "id" );
+			$log_ids 				= implode(",", $log_ids);
+
+			$wpdb->query("DELETE FROM {$mycred_log_table} WHERE id IN({$log_ids}) "); 
+
+			$this->core->update_users_balance( (int) $user_id, $total_creds_remove, $this->mycred_type );
+
+			// Update total balance (if enabled)
+			if ( MYCRED_ENABLE_TOTAL_BALANCE && MYCRED_ENABLE_LOGGING && ( $total_creds_remove > 0 || ( $total_creds_remove < 0 && "wilcity_mycred_photos_updated_each" == 'manual' ) ) ) {
+				$this->update_users_total_balance( (int) $user_id, $total_creds_remove, $this->mycred_type );
+			}
+		}
 
 		// Check if user is excluded (required)
 		if ( $this->core->exclude_user( $user_id ) ) return;
 
 		// Limit & Execute
-		if ( ! $this->over_hook_limit( '', 'wilcity_mycred_photos_updated_each', $user_id ) ) {
-			foreach ( $images as $image_id => $image_url) {
-				if( ! $this->has_entry( 'wilcity_mycred_photos_updated_each', $post_id, $user_id, $image_id, $this->mycred_type ) ) {
-					$this->core->add_creds(
-						'wilcity_mycred_photos_updated_each',
-						$user_id,
-						$this->prefs['creds'],
-						$this->prefs['log'],
-						$post_id,
-						$image_id,
-						$this->mycred_type
-					);
-				}
+		foreach ( $images as $image_id => $image_url) {
+			$this->core->add_creds(
+				'wilcity_mycred_photos_updated_each',
+				$user_id,
+				$this->prefs['creds'],
+				$this->prefs['log'],
+				$post_id,
+				$image_id,
+				$this->mycred_type
+			);
+		}
+	}
+
+	public function listing_updated_gallery_image_deleted($meta_id, $post_id, $meta_key, $meta_value) {
+		global $wpdb, $mycred_log_table;
+
+		$user_id = get_current_user_id();
+
+		// Check if user is updating logo only and of lising only (required)
+		if ( "listing" != get_post_type( $post_id ) ) return;
+
+		if ( "wilcity_gallery" != $meta_key ) return;
+
+
+		$logs = $wpdb->get_results( "SELECT * FROM {$mycred_log_table} WHERE ref ='wilcity_mycred_photos_updated_each' AND ref_id = {$post_id} ");
+		
+		if( $logs ) {
+			$total_creds 			= wp_list_pluck( $logs, "creds" );
+			$total_creds 			= array_sum($total_creds);
+			$total_creds_remove 	= -1 * $total_creds;
+			$log_ids 				= wp_list_pluck( $logs, "id" );
+			$log_ids 				= implode(",", $log_ids);
+
+
+			foreach ( $logs as $key => $log ) {
+				$this->core->add_creds(
+					'wilcity_mycred_photos_removed_each',
+					$user_id,
+					-1 * $this->prefs['creds'],
+					$this->prefs['log'],
+					$post_id,
+					"",
+					$this->mycred_type
+				);
 			}
 		}
 	}
@@ -676,12 +869,7 @@ class WilCity_myCRED_Photo extends myCRED_Hook {
 						<input type="text" name="<?php echo $this->field_name( 'creds' ); ?>" id="<?php echo $this->field_id( 'creds' ); ?>" value="<?php echo $this->core->number( $prefs['creds'] ); ?>" class="form-control" />
 					</div>
 				</div>
-				<div class="col-lg-4 col-md-6 col-sm-6 col-xs-12">
-					<div class="form-group">
-						<label for="<?php echo $this->field_id( 'limit' ); ?>"><?php _e( 'Limit', 'mycred' ); ?></label>
-						<?php echo $this->hook_limit_setting( $this->field_name( 'limit' ), $this->field_id( 'limit' ), $prefs['limit'] ); ?>
-					</div>
-				</div>
+				
 				<div class="col-lg-6 col-md-12 col-sm-12 col-xs-12">
 					<div class="form-group">
 						<label for="<?php echo $this->field_id( 'log' ); ?>"><?php _e( 'Log Template', 'mycred' ); ?></label>
@@ -702,16 +890,7 @@ class WilCity_myCRED_Photo extends myCRED_Hook {
 	 * @version 1.0
 	 */
 	function sanitise_preferences( $data ) {
-
-		if ( isset( $data['limit'] ) && isset( $data['limit_by'] ) ) {
-			$limit = sanitize_text_field( $data['limit'] );
-			if ( $limit == '' ) $limit = 0;
-			$data['limit'] = $limit . '/' . $data['limit_by'];
-			unset( $data['limit_by'] );
-		}
-
 		return $data;
-
 	}
 }
 
@@ -738,6 +917,8 @@ class WilCity_myCRED_Video extends myCRED_Hook {
 	public function run() {
 		
 		add_action( 'added_post_meta',  array( $this, 'listing_updated_video_item' ), 99, 4 );
+		add_action( 'updated_postmeta',  array( $this, 'listing_updated_video_item' ), 99, 4 );
+		add_action( 'delete_post_meta',  	array( $this, 'listing_updated_video_item_deleted' ), 99, 4 );
 	}
 
 
@@ -746,7 +927,57 @@ class WilCity_myCRED_Video extends myCRED_Hook {
 	 */
 	public function listing_updated_video_item( $meta_id, $post_id, $meta_key, $meta_value ) {
 
+		global $wpdb, $mycred_log_table;
+
 		$user_id = get_current_user_id();
+
+		// Check if user is updating logo only and of lising only (required)
+		if ( "listing" != get_post_type( $post_id ) ) return;
+
+		if ( "wilcity_video_srcs" != $meta_key ) return;
+
+		$videos  = maybe_unserialize( $meta_value );
+
+		$logs = $wpdb->get_results( "SELECT * FROM {$mycred_log_table} WHERE ref ='wilcity_mycred_videos_updated_each' AND ref_id = {$post_id} ");
+		
+		if( $logs ) {
+			$total_creds 			= wp_list_pluck( $logs, "creds" );
+			$total_creds 			= array_sum($total_creds);
+			$total_creds_remove 	= -1 * $total_creds;
+			$total_creds_remove     = $this->core->number( $total_creds_remove );
+			$total_creds_remove     = $this->core->enforce_max( $user_id, $total_creds_remove );
+			$log_ids 				= wp_list_pluck( $logs, "id" );
+			$log_ids 				= implode(",", $log_ids);
+
+			$wpdb->query("DELETE FROM {$mycred_log_table} WHERE id IN({$log_ids}) "); 
+
+			$this->core->update_users_balance( (int) $user_id, $total_creds_remove, $this->mycred_type );
+
+			// Update total balance (if enabled)
+			if ( MYCRED_ENABLE_TOTAL_BALANCE && MYCRED_ENABLE_LOGGING && ( $total_creds_remove > 0 || ( $total_creds_remove < 0 && "wilcity_mycred_videos_updated_each" == 'manual' ) ) ) {
+				$this->update_users_total_balance( (int) $user_id, $total_creds_remove, $this->mycred_type );
+			}
+		}
+
+		// Check if user is excluded (required)
+		if ( $this->core->exclude_user( $user_id ) ) return;
+
+		// Limit & Execute
+		foreach ( $videos as $video_id => $video_url) {
+			$this->core->add_creds(
+				'wilcity_mycred_videos_updated_each',
+				$user_id,
+				$this->prefs['creds'],
+				$this->prefs['log'],
+				$post_id,
+				$video_id,
+				$this->mycred_type
+			);
+		}
+
+		/***********************************/
+
+		/*$user_id = get_current_user_id();
 
 		// Check if user is updating logo only and of lising only (required)
 		if ( "listing" != get_post_type( $post_id ) ) return;
@@ -775,8 +1006,45 @@ class WilCity_myCRED_Video extends myCRED_Hook {
 					);
 				}
 			}
-		}
+		}*/
+	}
 
+	public function listing_updated_video_item_deleted($meta_id, $post_id, $meta_key, $meta_value) {
+
+		global $wpdb, $mycred_log_table;
+
+		$user_id = get_current_user_id();
+
+		// Check if user is updating logo only and of lising only (required)
+		if ( "listing" != get_post_type( $post_id ) ) return;
+
+		if ( "wilcity_video_srcs" != $meta_key ) return;
+
+
+		$logs = $wpdb->get_results( "SELECT * FROM {$mycred_log_table} WHERE ref ='wilcity_mycred_videos_updated_each' AND ref_id = {$post_id} ");
+		
+		if( $logs ) {
+			$total_creds 			= wp_list_pluck( $logs, "creds" );
+			$total_creds 			= array_sum($total_creds);
+			$total_creds_remove 	= -1 * $total_creds;
+			$total_creds_remove     = $this->core->number( $total_creds_remove );
+			$total_creds_remove     = $this->core->enforce_max( $user_id, $total_creds_remove );
+			$log_ids 				= wp_list_pluck( $logs, "id" );
+			$log_ids 				= implode(",", $log_ids);
+
+
+			foreach ( $logs as $key => $log ) {
+				$this->core->add_creds(
+					'wilcity_mycred_videos_removed_each',
+					$user_id,
+					-1 * $this->prefs['creds'],
+					$this->prefs['log'],
+					$post_id,
+					"",
+					$this->mycred_type
+				);
+			}
+		}
 	}
 
 	/**
@@ -797,12 +1065,7 @@ class WilCity_myCRED_Video extends myCRED_Hook {
 						<input type="text" name="<?php echo $this->field_name( 'creds' ); ?>" id="<?php echo $this->field_id( 'creds' ); ?>" value="<?php echo $this->core->number( $prefs['creds'] ); ?>" class="form-control" />
 					</div>
 				</div>
-				<div class="col-lg-4 col-md-6 col-sm-6 col-xs-12">
-					<div class="form-group">
-						<label for="<?php echo $this->field_id( 'limit' ); ?>"><?php _e( 'Limit', 'mycred' ); ?></label>
-						<?php echo $this->hook_limit_setting( $this->field_name( 'limit' ), $this->field_id( 'limit' ), $prefs['limit'] ); ?>
-					</div>
-				</div>
+				
 				<div class="col-lg-6 col-md-12 col-sm-12 col-xs-12">
 					<div class="form-group">
 						<label for="<?php echo $this->field_id( 'log' ); ?>"><?php _e( 'Log Template', 'mycred' ); ?></label>
@@ -823,16 +1086,7 @@ class WilCity_myCRED_Video extends myCRED_Hook {
 	 * @version 1.0
 	 */
 	function sanitise_preferences( $data ) {
-
-		if ( isset( $data['limit'] ) && isset( $data['limit_by'] ) ) {
-			$limit = sanitize_text_field( $data['limit'] );
-			if ( $limit == '' ) $limit = 0;
-			$data['limit'] = $limit . '/' . $data['limit_by'];
-			unset( $data['limit_by'] );
-		}
-
 		return $data;
-
 	}
 }
 
@@ -859,7 +1113,8 @@ class WilCity_myCRED_Posts extends myCRED_Hook {
 	 */
 	public function run() {
 		
-		add_action( 'added_post_meta',  array( $this, 'listing_updated_posts' ), 99, 4 );
+		/*add_action( 'added_post_meta',  array( $this, 'listing_updated_posts' ), 99, 4 );
+		add_action( 'updated_postmeta',  array( $this, 'listing_updated_posts' ), 99, 4 );*/
 	}
 
 
@@ -877,29 +1132,31 @@ class WilCity_myCRED_Posts extends myCRED_Hook {
 
 		if ( empty( $meta_value ) ) return;
 
-		$plan_title = get_the_title( $meta_value );
-		if( $plan_title != "Premium" ) {
-			return;
-		}
-
-		//if ( is_admin() ) return;
-
 		// Check if user is excluded (required)
 		if ( $this->core->exclude_user( $user_id ) ) return;
 
-		// Limit & Execute
-		if ( ! $this->over_hook_limit( '', 'wilcity_mycred_posts_updated_each', $user_id ) ) {
-			if( ! $this->has_entry( 'wilcity_mycred_posts_updated_each', $post_id, $user_id, "add", $this->mycred_type ) ) {
-				$this->core->add_creds(
-					'wilcity_mycred_posts_updated_each',
-					$user_id,
-					$this->prefs['creds'],
-					$this->prefs['log'],
-					$post_id,
-					'add',
-					$this->mycred_type
-				);
-			}
+		$plan_title = get_the_title( $meta_value );
+
+		if( $plan_title == "Premium" ) {
+			$this->core->add_creds(
+				'wilcity_mycred_posts_updated_each',
+				$user_id,
+				$this->prefs['creds'],
+				$this->prefs['log'],
+				$post_id,
+				'add',
+				$this->mycred_type
+			);
+		} else {
+			$this->core->add_creds(
+				'wilcity_mycred_posts_updated_each',
+				$user_id,
+				-1 * $this->prefs['creds'],
+				$this->prefs['log'],
+				$post_id,
+				'add',
+				$this->mycred_type
+			);
 		}
 	}
 
@@ -921,12 +1178,7 @@ class WilCity_myCRED_Posts extends myCRED_Hook {
 						<input type="text" name="<?php echo $this->field_name( 'creds' ); ?>" id="<?php echo $this->field_id( 'creds' ); ?>" value="<?php echo $this->core->number( $prefs['creds'] ); ?>" class="form-control" />
 					</div>
 				</div>
-				<div class="col-lg-4 col-md-6 col-sm-6 col-xs-12">
-					<div class="form-group">
-						<label for="<?php echo $this->field_id( 'limit' ); ?>"><?php _e( 'Limit', 'mycred' ); ?></label>
-						<?php echo $this->hook_limit_setting( $this->field_name( 'limit' ), $this->field_id( 'limit' ), $prefs['limit'] ); ?>
-					</div>
-				</div>
+				
 				<div class="col-lg-6 col-md-12 col-sm-12 col-xs-12">
 					<div class="form-group">
 						<label for="<?php echo $this->field_id( 'log' ); ?>"><?php _e( 'Log Template', 'mycred' ); ?></label>
@@ -947,20 +1199,9 @@ class WilCity_myCRED_Posts extends myCRED_Hook {
 	 * @version 1.0
 	 */
 	function sanitise_preferences( $data ) {
-
-		if ( isset( $data['limit'] ) && isset( $data['limit_by'] ) ) {
-			$limit = sanitize_text_field( $data['limit'] );
-			if ( $limit == '' ) $limit = 0;
-			$data['limit'] = $limit . '/' . $data['limit_by'];
-			unset( $data['limit_by'] );
-		}
-
 		return $data;
-
 	}
 }
-
-
 
 
 class WilCity_myCRED_Premium_Subscription extends myCRED_Hook {
@@ -972,7 +1213,7 @@ class WilCity_myCRED_Premium_Subscription extends myCRED_Hook {
 		parent::__construct( array(
 			'id'       => 'wilcity_mycred_premium_subscription_updated',
 			'defaults' => array(
-				'creds'   => 50,
+				'creds'   => 1000,
 				'limit'   => '1/d',
 				'log'     => '%plural% for adding premium subscription on listing'
 			)
@@ -985,7 +1226,8 @@ class WilCity_myCRED_Premium_Subscription extends myCRED_Hook {
 	 */
 	public function run() {
 		
-		//add_action( 'added_post_meta',  array( $this, 'listing_updated_premium_subscription' ), 99, 4 );
+		add_action( 'added_post_meta',  array( $this, 'listing_updated_premium_subscription' ), 99, 4 );
+		add_action( 'updated_postmeta',  array( $this, 'listing_updated_premium_subscription' ), 99, 4 );
 	}
 
 
@@ -999,17 +1241,16 @@ class WilCity_myCRED_Premium_Subscription extends myCRED_Hook {
 		// Check if user is updating logo only and of lising only (required)
 		if ( "listing" != get_post_type( $post_id ) ) return;
 
-		if ( "wilcity_logo" != $meta_key ) return;
+		if ( "wilcity_oldPlanID" != $meta_key ) return;
 
 		if ( empty( $meta_value ) ) return;
-
-		//if ( is_admin() ) return;
 
 		// Check if user is excluded (required)
 		if ( $this->core->exclude_user( $user_id ) ) return;
 
-		// Limit & Execute
-		if ( ! $this->over_hook_limit( '', 'wilcity_mycred_premium_subscription_updated', $user_id ) )
+		$plan_title = get_the_title( $meta_value );
+
+		if( $plan_title == "Premium" || $plan_title == "premium" || strpos($plan_title, 'premium') !== false ) {
 			$this->core->add_creds(
 				'wilcity_mycred_premium_subscription_updated',
 				$user_id,
@@ -1019,6 +1260,17 @@ class WilCity_myCRED_Premium_Subscription extends myCRED_Hook {
 				'add',
 				$this->mycred_type
 			);
+		} else {
+			$this->core->add_creds(
+				'wilcity_mycred_premium_subscription_removed',
+				$user_id,
+				-1 * $this->prefs['creds'],
+				$this->prefs['log'],
+				$post_id,
+				'add',
+				$this->mycred_type
+			);
+		}
 	}
 
 	/**
@@ -1039,12 +1291,7 @@ class WilCity_myCRED_Premium_Subscription extends myCRED_Hook {
 						<input type="text" name="<?php echo $this->field_name( 'creds' ); ?>" id="<?php echo $this->field_id( 'creds' ); ?>" value="<?php echo $this->core->number( $prefs['creds'] ); ?>" class="form-control" />
 					</div>
 				</div>
-				<div class="col-lg-4 col-md-6 col-sm-6 col-xs-12">
-					<div class="form-group">
-						<label for="<?php echo $this->field_id( 'limit' ); ?>"><?php _e( 'Limit', 'mycred' ); ?></label>
-						<?php echo $this->hook_limit_setting( $this->field_name( 'limit' ), $this->field_id( 'limit' ), $prefs['limit'] ); ?>
-					</div>
-				</div>
+				
 				<div class="col-lg-6 col-md-12 col-sm-12 col-xs-12">
 					<div class="form-group">
 						<label for="<?php echo $this->field_id( 'log' ); ?>"><?php _e( 'Log Template', 'mycred' ); ?></label>
@@ -1065,36 +1312,31 @@ class WilCity_myCRED_Premium_Subscription extends myCRED_Hook {
 	 * @version 1.0
 	 */
 	function sanitise_preferences( $data ) {
-
-		if ( isset( $data['limit'] ) && isset( $data['limit_by'] ) ) {
-			$limit = sanitize_text_field( $data['limit'] );
-			if ( $limit == '' ) $limit = 0;
-			$data['limit'] = $limit . '/' . $data['limit_by'];
-			unset( $data['limit_by'] );
-		}
-
 		return $data;
-
 	}
 }
 
 
+add_action( "wiloke-listing-tools/passed-preview-step", "wilcity_update_lising_menu_order", 99, 2 );
+function wilcity_update_lising_menu_order( $listing_id, $plan_id ) {
 
-
-
-
-
-function wilcity_mycred_check_entry( $action = '', $reference = '', $user_id = '', $data = '', $type = '' ) {
 	global $wpdb, $mycred_log_table;
 
-	$timestamp = current_time( 'timestamp' );
-	$beginOfDay = DateTime::createFromFormat('Y-m-d H:i:s', (new DateTime())->setTimestamp($timestamp)->format('Y-m-d 00:00:00'))->getTimestamp();
-	$endOfDay = DateTime::createFromFormat('Y-m-d H:i:s', (new DateTime())->setTimestamp($timestamp)->format('Y-m-d 23:59:59'))->getTimestamp();
+	$user_id = get_current_user_id();
+	$post_id = $listing_id;
 
+	$logs = $wpdb->get_results( "SELECT * FROM {$mycred_log_table} WHERE ref_id = {$post_id} ");
 
-	$sql = "SELECT id FROM {$mycred_log_table} WHERE ref = %s AND user_id = %d AND LIKE %s AND ctype = %s;";
-	$wpdb->get_results( $wpdb->prepare( $sql, $action, $user_id, $this->mycred_type ) );
-	if ( $wpdb->num_rows > 0 ) return true;
+	if( $logs ) {
+		$total_creds = wp_list_pluck( $logs, "creds" );
+		$total_creds = array_sum($total_creds);
 
-	return false;
+		$updated = $wpdb->update( 
+			$wpdb->prefix . "posts",
+			array( 
+				"menu_order"	=>	$total_creds
+			), 
+			array( 'ID' => $post_id )
+		);
+	}
 }
